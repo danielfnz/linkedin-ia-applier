@@ -12,7 +12,7 @@ A Python bot that automatically applies to all **LinkedIn “Easy Apply” jobs*
    cd linkedin-ia-applier
    ```
 
-2. **Make sure Python and pip are installed**
+2. **Make sure Python3 and pip3 are installed**
 
 3. **Install dependencies**
    ```bash
