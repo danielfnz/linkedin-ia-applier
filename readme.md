@@ -31,7 +31,7 @@ A Python bot that automatically applies to all **LinkedIn “Easy Apply” jobs*
 6. **Change your linkedin language to English**
    - https://www.linkedin.com/mypreferences/d/settings/language/
      
-6. **Run the bot**
+7. **Run the bot**
    ```bash
    python3 main.py
    ```
