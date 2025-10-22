@@ -26,8 +26,11 @@ A Python bot that automatically applies to all **LinkedIn “Easy Apply” jobs*
 
 5. **Save your cv**
   - Save your CV in a root folder
-  - Add your **cv_file_name patch** on line **4**  
-
+  - Add your **cv_file_name patch** on line **4**
+    
+6. **Change your linkedin language to English**
+   - https://www.linkedin.com/mypreferences/d/settings/language/
+     
 6. **Run the bot**
    ```bash
    python3 main.py
