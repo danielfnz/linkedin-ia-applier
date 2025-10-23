@@ -171,8 +171,9 @@ test.py
 
 # user files
 geckodriver.log
-*.txt
 *.exe
+
+.vscode
 
 # premium files
 angelco.py
