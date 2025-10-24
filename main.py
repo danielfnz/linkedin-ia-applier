@@ -27,7 +27,8 @@ if not os.path.exists("cv.md"):
     result = converter.convert(source)
     with open("cv.md", "w", encoding="utf-8") as f:
         f.write(result.document.export_to_markdown())
-        f.write("\n- Meu LinkedIn ProfileURL - "+config.LinkedInProfileURL)
+        f.write("\n- link do seu perfil no LinkedIn - " +
+                config.LinkedInProfileURL)
         f.write("\n- Minha localização - "+config.Location)
         f.write("\n- Expectativa salarial CLT - "+config.salaryCLT)
         f.write("\n- Expectativa salarial PJ - "+config.salaryPJ)
@@ -397,7 +398,7 @@ class Linkedin:
             if not options:
                 return
 
-            utils.prGreen('QUESTION', label)
+            utils.prGreen(f'QUESTION {label}')
             for idx, text in options:
                 utils.prGreen(f"index: {idx} - value: {text}")
 
@@ -522,6 +523,8 @@ class Linkedin:
 
         try:
             for pages in range(applyPages):
+                self.answerQuestions()
+                time.sleep(random.uniform(1, constants.botSpeed))
                 self.driver.find_element(
                     By.CSS_SELECTOR, "button[aria-label='Continue to next step']").click()
         except:
