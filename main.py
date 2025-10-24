@@ -16,6 +16,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.support.ui import Select
 import openai
 from openai import OpenAI
+from selenium.common.exceptions import NoSuchElementException, WebDriverException
 from docling.document_converter import DocumentConverter
 import undetected_chromedriver as uc
 
@@ -62,36 +63,42 @@ class Linkedin:
 
         # instanciar opções do Chrome
         options = uc.ChromeOptions()
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument('--ignore-ssl-errors')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-infobars')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument('--blink-settings=imagesEnabled=false')
+        # 🧩 Evita logs e banners
+        options.add_argument("--log-level=3")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--start-maximized")
 
-        # modo headless (sem interface gráfica)
-        if config.headless:
-            options.add_argument('--headless=new')
-            options.add_argument('--window-size=1920,1080')
-
+        # 🌍 Define idioma e agente de usuário falso
+        options.add_argument("--lang=pt-BR")
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/126.0.6478.61 Safari/537.36"
+        )
         # inicializar o driver com as opções
         self.driver = uc.Chrome(options=options, use_subprocess=True)
 
         self.cookies_path = f"{os.path.join(os.getcwd(), 'cookies')}/{self.getHash(config.email)}.pkl"
         self.driver.get('https://www.linkedin.com')
-        self.loadCookies()
+        # self.loadCookies()
 
         if not self.isLoggedIn():
             self.driver.get(
                 "https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin")
             utils.prYellow("🔄 Trying to log in Linkedin...")
             try:
-                self.driver.find_element(
-                    "id", "username").send_keys(config.email)
+                email_element = self.driver.find_element(
+                    "id", "username")
+                email_element.clear()
+                email_element.send_keys(config.email)
                 time.sleep(2)
-                self.driver.find_element(
-                    "id", "password").send_keys(config.password)
+                pass_element = self.driver.find_element(
+                    "id", "password")
+                pass_element.clear()
+                pass_element.send_keys(config.password)
                 time.sleep(2)
                 self.driver.find_element(
                     "xpath", '//button[@type="submit"]').click()
@@ -272,57 +279,64 @@ class Linkedin:
         jobLocation = ""
 
         try:
-            jobTitle = self.driver.find_element(
-                By.CSS_SELECTOR, "h1.t-24.t-bold.inline").text.strip()
+            # tenta localizar o título pelo seletor preferido (XPath)
+            elems = self.driver.find_elements(
+                By.XPATH, "//h1[contains(@class, 'job-title')]")
+            if elems:
+                # usa o primeiro elemento encontrado e prefere innerHTML se existir
+                el = elems[0]
+                raw = el.get_attribute("innerHTML") or el.text or ""
+                job_title = raw.strip()
+            else:
+                # fallback para outro seletor conhecido
+                elems2 = self.driver.find_elements(
+                    By.CSS_SELECTOR, "h1.t-24.t-bold.inline")
+                if elems2:
+                    job_title = elems2[0].text.strip()
+                else:
+                    job_title = ""
 
-            res = [blItem for blItem in config.blackListTitles if blItem.lower()
-                   in jobTitle.lower()]
-            if len(res) > 0:
-                jobTitle += "(blacklisted title: " + ' '.join(res) + ")"
+            # se encontrar o título, checa blacklist
+            if job_title:
+                lower_title = job_title.lower()
+                res = [
+                    blItem for blItem in config.blackListTitles if blItem.lower() in lower_title]
+                if res:
+                    job_title += " (blacklisted title: " + ' '.join(res) + ")"
 
-        except Exception as e:
-            if config.displayWarnings:
+        except (NoSuchElementException, WebDriverException) as e:
+            # captura exceções específicas do Selenium
+            if getattr(config, "displayWarnings", False):
                 utils.prYellow(
-                    "⚠️ Warning in getting jobTitle: " + str(e)[:50])
-            jobTitle = ""
-
-        try:
-            time.sleep(5)
-            jobDetail = self.driver.find_element(
-                By.XPATH, "//div[contains(@class, 'job-details-jobs')]//div").text.replace("·", "|")
-            res = [blItem for blItem in config.blacklistCompanies if (
-                blItem.lower() in jobTitle.lower())]
-            if (len(res) > 0):
-                jobDetail += "(blacklisted company: " + ' '.join(res) + ")"
+                    "⚠️ Warning in getting jobTitle: " + str(e)[:200])
+            job_title = ""
         except Exception as e:
-            if (config.displayWarnings):
-                print(e)
+            # captura qualquer outra exceção inesperada
+            if getattr(config, "displayWarnings", False):
                 utils.prYellow(
-                    "⚠️ Warning in getting jobDetail: " + str(e)[0:100])
-            jobDetail = ""
-
-        try:
-            jobWorkStatusSpans = self.driver.find_elements(
-                By.XPATH, "//span[contains(@class,'ui-label ui-label--accent-3 text-body-small')]//span[contains(@aria-hidden,'true')]")
-            for span in jobWorkStatusSpans:
-                jobLocation = jobLocation + " | " + span.text
-
-        except Exception as e:
-            if (config.displayWarnings):
-                print(e)
-                utils.prYellow(
-                    "⚠️ Warning in getting jobLocation: " + str(e)[0:100])
-            jobLocation = ""
+                    "⚠️ Unexpected error in get_job_title: " + str(e)[:200])
+            job_title = ""
 
         textToWrite = str(count) + " | " + jobTitle + \
-            " | " + jobDetail + jobLocation
+            " | " + jobLocation
         return textToWrite
 
     def easyApplyButton(self):
         try:
             time.sleep(random.uniform(1, constants.botSpeed))
-            button = self.driver.find_element(
-                By.CSS_SELECTOR, 'button[data-live-test-job-apply-button]')
+            button = None
+            try:
+                # tenta o seletor CSS primeiro
+                button = self.driver.find_element(
+                    By.CSS_SELECTOR, 'button[data-live-test-job-apply-button]')
+            except NoSuchElementException:
+                try:
+                    # se o primeiro falhar, tenta o XPATH
+                    button = self.driver.find_element(
+                        By.XPATH, '//*[@data-view-name="job-apply-button"]')
+                except NoSuchElementException:
+                    button = None  # não encontrou nenhum
+
             EasyApplyButton = button
         except:
             EasyApplyButton = False
@@ -420,7 +434,7 @@ class Linkedin:
                 f"Pergunta: {label}\n\n"
                 "Escolha a melhor resposta para garantir a vaga.\n"
                 "Se a pergunta for sobre anos, use apenas números.\n"
-                "Se o usuário nunca trabalhou com essa tecnologia, responda com '1'.\n"
+                "Se o usuário nunca trabalhou com essa tecnologia, responda com '10'.\n"
                 "Não escreva explicações ou contexto."
             )
 
@@ -447,7 +461,7 @@ class Linkedin:
                 f"Pergunta: {label}\n\n"
                 "Escolha a melhor resposta para garantir a vaga.\n"
                 "Se a pergunta for sobre anos, use apenas números.\n"
-                "Se o usuário nunca trabalhou com essa tecnologia, responda com '1'.\n"
+                "Se o usuário nunca trabalhou com essa tecnologia, responda com '10'.\n"
                 "Não escreva explicações ou contexto."
             )
 
