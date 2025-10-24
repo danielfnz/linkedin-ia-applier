@@ -17,9 +17,10 @@ from selenium.webdriver.support.ui import Select
 import openai
 from openai import OpenAI
 from docling.document_converter import DocumentConverter
+import undetected_chromedriver as uc
 
 if not os.path.exists("cv.md"):
-    utils.prGreen("Convert to .md")
+    utils.prGreen("Convert cv to .md")
     source = config.cvName
     converter = DocumentConverter()
     result = converter.convert(source)
@@ -34,6 +35,8 @@ client = OpenAI(
     # This is the default and can be omitted
     api_key=config.apikeyOpenAI,
 )
+
+utils.prYellow("Uploading CV to OpenAi")
 
 # Cria um vector store (banco vetorial)
 vector_store = client.vector_stores.create(name="LinkedIn AI Apply Bot")
@@ -54,8 +57,27 @@ class Linkedin:
     def __init__(self):
         utils.prYellow(
             "🌐 Bot will run in Chrome browser and log in Linkedin for you.")
-        self.driver = webdriver.Chrome(service=ChromeService(
-            ChromeDriverManager().install()), options=utils.chromeBrowserOptions())
+
+        import undetected_chromedriver as uc
+
+        # instanciar opções do Chrome
+        options = uc.ChromeOptions()
+        options.add_argument('--ignore-certificate-errors')
+        options.add_argument('--ignore-ssl-errors')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--blink-settings=imagesEnabled=false')
+
+        # modo headless (sem interface gráfica)
+        if config.headless:
+            options.add_argument('--headless=new')
+            options.add_argument('--window-size=1920,1080')
+
+        # inicializar o driver com as opções
+        self.driver = uc.Chrome(options=options, use_subprocess=True)
+
         self.cookies_path = f"{os.path.join(os.getcwd(), 'cookies')}/{self.getHash(config.email)}.pkl"
         self.driver.get('https://www.linkedin.com')
         self.loadCookies()
@@ -251,15 +273,17 @@ class Linkedin:
 
         try:
             jobTitle = self.driver.find_element(
-                By.XPATH, "//h1[contains(@class, 'job-title')]").get_attribute("innerHTML").strip()
-            res = [blItem for blItem in config.blackListTitles if (
-                blItem.lower() in jobTitle.lower())]
-            if (len(res) > 0):
+                By.CSS_SELECTOR, "h1.t-24.t-bold.inline").text.strip()
+
+            res = [blItem for blItem in config.blackListTitles if blItem.lower()
+                   in jobTitle.lower()]
+            if len(res) > 0:
                 jobTitle += "(blacklisted title: " + ' '.join(res) + ")"
+
         except Exception as e:
-            if (config.displayWarnings):
+            if config.displayWarnings:
                 utils.prYellow(
-                    "⚠️ Warning in getting jobTitle: " + str(e)[0:50])
+                    "⚠️ Warning in getting jobTitle: " + str(e)[:50])
             jobTitle = ""
 
         try:
@@ -298,7 +322,7 @@ class Linkedin:
         try:
             time.sleep(random.uniform(1, constants.botSpeed))
             button = self.driver.find_element(
-                By.XPATH, '//*[@data-view-name="job-apply-button"]')
+                By.CSS_SELECTOR, 'button[data-live-test-job-apply-button]')
             EasyApplyButton = button
         except:
             EasyApplyButton = False
@@ -323,7 +347,7 @@ class Linkedin:
 
     def _ask_gpt(self, prompt: str):
         try:
-            response = self.client.responses.create(
+            response = client.responses.create(
                 model="gpt-4.1-mini",
                 temperature=0,
                 input=[{
@@ -332,7 +356,7 @@ class Linkedin:
                 }],
                 tools=[{
                     "type": "file_search",
-                    "vector_store_ids": [self.vector_store.id],
+                    "vector_store_ids": [vector_store.id],
                 }],
             )
 
@@ -342,7 +366,7 @@ class Linkedin:
                         if content.type == "output_text":
                             return content.text.strip()
         except Exception as e:
-            self.utils.prRed(f"❌ Erro no GPT: {e}")
+            utils.prRed(f"❌ Erro no GPT: {e}")
         return None
 
     def _fill_select(self, select_block):
@@ -359,9 +383,9 @@ class Linkedin:
             if not options:
                 return
 
-            self.utils.prGreen('QUESTION', label)
+            utils.prGreen('QUESTION', label)
             for idx, text in options:
-                self.utils.prGreen(f"index: {idx} - value: {text}")
+                utils.prGreen(f"index: {idx} - value: {text}")
 
             options_text = "\n".join(
                 [f"index: {i} - value: {v}" for i, v in options])
@@ -377,12 +401,12 @@ class Linkedin:
             if answer and answer.isdigit():
                 idx = int(answer)
                 select.select_by_index(idx)
-                self.utils.prGreen(f"✅ Selecionado index: {idx}")
+                utils.prGreen(f"✅ Selecionado index: {idx}")
             else:
-                self.utils.prRed(f"⚠️ Resposta inválida: {answer}")
+                utils.prRed(f"⚠️ Resposta inválida: {answer}")
 
         except Exception as e:
-            self.utils.prRed(f"Erro ao processar select: {e}")
+            utils.prRed(f"Erro ao processar select: {e}")
 
     def _fill_input(self, input_block):
         """Preenche campos <input>."""
@@ -396,7 +420,7 @@ class Linkedin:
                 f"Pergunta: {label}\n\n"
                 "Escolha a melhor resposta para garantir a vaga.\n"
                 "Se a pergunta for sobre anos, use apenas números.\n"
-                "Se o usuário nunca trabalhou com essa tecnologia, responda com '10'.\n"
+                "Se o usuário nunca trabalhou com essa tecnologia, responda com '1'.\n"
                 "Não escreva explicações ou contexto."
             )
 
@@ -423,7 +447,7 @@ class Linkedin:
                 f"Pergunta: {label}\n\n"
                 "Escolha a melhor resposta para garantir a vaga.\n"
                 "Se a pergunta for sobre anos, use apenas números.\n"
-                "Se o usuário nunca trabalhou com essa tecnologia, responda com '10'.\n"
+                "Se o usuário nunca trabalhou com essa tecnologia, responda com '1'.\n"
                 "Não escreva explicações ou contexto."
             )
 

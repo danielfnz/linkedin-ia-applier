@@ -3,6 +3,7 @@ import constants
 import config
 import time
 from typing import List
+import re
 
 from selenium import webdriver
 
@@ -62,7 +63,8 @@ def jobsToPages(numOfJobs: str) -> int:
     if (' ' in numOfJobs):
         spaceIndex = numOfJobs.index(' ')
         totalJobs = (numOfJobs[0:spaceIndex])
-        totalJobs_int = int(totalJobs.replace(',', ''))
+
+        totalJobs_int = int(re.sub(r'\D', '', totalJobs))
         number_of_pages = math.ceil(totalJobs_int/constants.jobsPerPage)
         if (number_of_pages > 40):
             number_of_pages = 40
