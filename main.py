@@ -38,7 +38,7 @@ client = OpenAI(
     api_key=config.apikeyOpenAI,
 )
 
-utils.prYellow("Uploading CV to OpenAi")
+utils.prYellow("Uploading CV to OpenAi...")
 
 # Cria um vector store (banco vetorial)
 vector_store = client.vector_stores.create(name="LinkedIn AI Apply Bot")
@@ -159,7 +159,14 @@ class Linkedin:
             self.driver.get(url)
             time.sleep(random.uniform(1, constants.botSpeed))
 
-            totalJobs = self.driver.find_element(By.XPATH, '//small').text
+            totalJobs = 0
+            try:
+                totalJobs = self.driver.find_element(By.XPATH, '//small').text
+            except:
+                utils.prRed(
+                    "❌ Jobs not found for this keywork, next.")
+                continue
+
             totalPages = utils.jobsToPages(totalJobs)
 
             urlWords = utils.urlToKeywords(url)
